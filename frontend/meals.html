@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Yemekler — Akıllı Aile Yemek Planlayıcı</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Yemek Listesi</h1>
+
+  <div class="card">
+    <h2>Yeni Yemek Ekle</h2>
+    <p class="muted">İsim veya YouTube linkinden en az birini girin.</p>
+    <form id="meal-form">
+      <label>İsim <input type="text" id="meal-name"></label>
+      <label>YouTube Linki <input type="url" id="meal-video"></label>
+      <label>Kategori (Çorba, Ana Yemek, Tatlı...) <input type="text" id="meal-category"></label>
+      <label>Malzemeler (virgülle ayrılmış) <input type="text" id="meal-ingredients"></label>
+      <label><input type="checkbox" id="meal-is-fish"> Balık yemeği</label>
+      <label>Uygun Aylar</label>
+      <div class="months-grid" id="months-grid"></div>
+      <button type="submit">Ekle</button>
+    </form>
+    <p id="meal-error" class="error"></p>
+  </div>
+
+  <div class="card">
+    <h2>Filtrele</h2>
+    <label>Kategori <input type="text" id="filter-category" placeholder="boş bırakılırsa tümü"></label>
+    <label>Ay (1-12) <input type="number" id="filter-month" min="1" max="12"></label>
+    <button id="filter-btn" type="button">Filtrele</button>
+    <button id="reset-filter-btn" type="button">Tümünü Göster</button>
+  </div>
+
+  <table id="meals-table">
+    <thead>
+      <tr><th>İsim</th><th>Kategori</th><th>Balık</th><th>Uygun Aylar</th><th></th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="api.js"></script>
+  <script>
+    const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+
+    function buildMonthsGrid() {
+      const grid = document.getElementById("months-grid");
+      MONTH_NAMES.forEach((name, i) => {
+        const label = document.createElement("label");
+        label.innerHTML = `<input type="checkbox" value="${i + 1}"> ${name}`;
+        grid.appendChild(label);
+      });
+    }
+
+    function renderMeals(meals) {
+      const tbody = document.querySelector("#meals-table tbody");
+      tbody.innerHTML = "";
+      for (const m of meals) {
+        const tr = document.createElement("tr");
+        const displayName = m.name || m.video_url;
+        tr.innerHTML = `
+          <td>${m.video_url ? `<a href="${m.video_url}" target="_blank">${displayName}</a>` : displayName}</td>
+          <td>${m.category || ""}</td>
+          <td>${m.is_fish ? "Evet" : ""}</td>
+          <td>${m.available_months || "Her ay"}</td>
+          <td><button data-id="${m.id}" class="delete-btn">Sil</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+      tbody.querySelectorAll(".delete-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          await apiFetch(`/meals/${btn.dataset.id}`, { method: "DELETE" });
+          loadMeals();
+        });
+      });
+    }
+
+    async function loadMeals() {
+      const meals = await apiFetch("/meals/");
+      renderMeals(meals);
+    }
+
+    document.getElementById("filter-btn").addEventListener("click", async () => {
+      const category = document.getElementById("filter-category").value;
+      const month = document.getElementById("filter-month").value;
+      let meals;
+      if (month) {
+        meals = await apiFetch(`/meals/available/${month}`);
+        if (category) meals = meals.filter((m) => m.category === category);
+      } else if (category) {
+        meals = await apiFetch(`/meals/category/${encodeURIComponent(category)}`);
+      } else {
+        meals = await apiFetch("/meals/");
+      }
+      renderMeals(meals);
+    });
+
+    document.getElementById("reset-filter-btn").addEventListener("click", () => {
+      document.getElementById("filter-category").value = "";
+      document.getElementById("filter-month").value = "";
+      loadMeals();
+    });
+
+    document.getElementById("meal-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("meal-error");
+      errorEl.textContent = "";
+      const months = Array.from(document.querySelectorAll("#months-grid input:checked")).map((c) => c.value);
+      const payload = {
+        name: document.getElementById("meal-name").value || null,
+        video_url: document.getElementById("meal-video").value || null,
+        category: document.getElementById("meal-category").value || null,
+        ingredients: document.getElementById("meal-ingredients").value || null,
+        is_fish: document.getElementById("meal-is-fish").checked,
+        available_months: months.length ? months.join(",") : null,
+      };
+      try {
+        await apiFetch("/meals/", { method: "POST", body: JSON.stringify(payload) });
+        e.target.reset();
+        loadMeals();
+      } catch (err) {
+        showError(errorEl, err);
+      }
+    });
+
+    (async function init() {
+      await requireLogin();
+      renderNav("meals.html");
+      buildMonthsGrid();
+      loadMeals();
+    })();
+  </script>
+</body>
+</html>

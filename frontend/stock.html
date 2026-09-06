@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Stok — Akıllı Aile Yemek Planlayıcı</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Mutfak Stoğu</h1>
+
+  <div class="card">
+    <h2>Fotoğraf / Video Yükle</h2>
+    <form id="scan-form">
+      <input type="file" id="scan-file" accept="image/*,video/*" required>
+      <button type="submit">Yükle ve Tara</button>
+    </form>
+    <p id="scan-status" class="muted"></p>
+    <p id="scan-error" class="error"></p>
+  </div>
+
+  <div class="card">
+    <h2>Manuel Ekle</h2>
+    <form id="manual-form">
+      <label>Ürün <input type="text" id="manual-name" required></label>
+      <label>Miktar <input type="text" id="manual-quantity" placeholder="örn. 2 paket"></label>
+      <button type="submit">Ekle</button>
+    </form>
+  </div>
+
+  <table id="stock-table">
+    <thead><tr><th>Ürün</th><th>Miktar</th><th>Kaynak</th><th>Onay Bekliyor</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="api.js"></script>
+  <script>
+    async function loadStock() {
+      const items = await apiFetch("/stock/");
+      const tbody = document.querySelector("#stock-table tbody");
+      tbody.innerHTML = "";
+      for (const item of items) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${item.name}</td>
+          <td>${item.quantity_text || ""}</td>
+          <td>${item.source}</td>
+          <td>${item.needs_review ? "Evet" : ""}</td>
+          <td>
+            ${item.needs_review ? `<button data-id="${item.id}" class="approve-btn">Onayla</button>` : ""}
+            <button data-id="${item.id}" class="delete-btn">Sil</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+      tbody.querySelectorAll(".delete-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          await apiFetch(`/stock/${btn.dataset.id}`, { method: "DELETE" });
+          loadStock();
+        });
+      });
+      tbody.querySelectorAll(".approve-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          await apiFetch(`/stock/${btn.dataset.id}`, {
+            method: "PUT",
+            body: JSON.stringify({ needs_review: false }),
+          });
+          loadStock();
+        });
+      });
+    }
+
+    document.getElementById("scan-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const statusEl = document.getElementById("scan-status");
+      const errorEl = document.getElementById("scan-error");
+      statusEl.textContent = "";
+      errorEl.textContent = "";
+      const file = document.getElementById("scan-file").files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const result = await apiFetch("/stock/scan/", { method: "POST", body: formData });
+        statusEl.textContent = result.message;
+        loadStock();
+      } catch (err) {
+        showError(errorEl, err);
+      }
+    });
+
+    document.getElementById("manual-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("manual-name").value;
+      const quantity_text = document.getElementById("manual-quantity").value || null;
+      await apiFetch("/stock/", { method: "POST", body: JSON.stringify({ name, quantity_text }) });
+      e.target.reset();
+      loadStock();
+    });
+
+    (async function init() {
+      await requireLogin();
+      renderNav("stock.html");
+      loadStock();
+    })();
+  </script>
+</body>
+</html>

@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Yerel SQLite veritabanı bağlantı adresi (Bilgisayarında ekstra program kurmadan çalışır)
+# SQLite veritabanı dosyasının konumu (proje dizininde meal_planner.db olarak oluşturulacak)
 SQLALCHEMY_DATABASE_URL = "sqlite:///./meal_planner.db"
 
 engine = create_engine(
@@ -11,3 +11,11 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
+# FastAPI endpoint'lerinde veritabanı oturumunu yönetmek için bağımlılık (dependency)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Kurallar — Akıllı Aile Yemek Planlayıcı</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Yemek Kuralları</h1>
+  <p class="muted">Örn: "Haftada en az 1 balık" için hedef etiket "fish", dönem "week", en az sayı 1.</p>
+
+  <div class="card">
+    <h2>Yeni Kural Ekle</h2>
+    <form id="rule-form">
+      <label>Kural Adı <input type="text" id="rule-name" required></label>
+      <label>Hedef Etiket <input type="text" id="rule-tag" placeholder="örn. fish" required></label>
+      <label>En Az Sayı <input type="number" id="rule-min" value="1" min="1" required></label>
+      <label>Dönem
+        <select id="rule-period">
+          <option value="week">Haftalık</option>
+        </select>
+      </label>
+      <button type="submit">Ekle</button>
+    </form>
+  </div>
+
+  <table id="rules-table">
+    <thead><tr><th>Ad</th><th>Hedef</th><th>En Az</th><th>Dönem</th><th>Aktif</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="api.js"></script>
+  <script>
+    async function loadRules() {
+      const rules = await apiFetch("/rules/");
+      const tbody = document.querySelector("#rules-table tbody");
+      tbody.innerHTML = "";
+      for (const r of rules) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.name}</td>
+          <td>${r.target_tag || ""}</td>
+          <td>${r.min_count}</td>
+          <td>${r.period}</td>
+          <td>${r.active ? "Evet" : "Hayır"}</td>
+          <td><button data-id="${r.id}" class="delete-btn">Sil</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+      tbody.querySelectorAll(".delete-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          await apiFetch(`/rules/${btn.dataset.id}`, { method: "DELETE" });
+          loadRules();
+        });
+      });
+    }
+
+    document.getElementById("rule-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById("rule-name").value,
+        rule_type: "min_per_week",
+        target_tag: document.getElementById("rule-tag").value,
+        min_count: parseInt(document.getElementById("rule-min").value, 10),
+        period: document.getElementById("rule-period").value,
+        active: true,
+      };
+      await apiFetch("/rules/", { method: "POST", body: JSON.stringify(payload) });
+      e.target.reset();
+      loadRules();
+    });
+
+    (async function init() {
+      await requireLogin();
+      renderNav("rules.html");
+      loadRules();
+    })();
+  </script>
+</body>
+</html>
