@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Tercihlerim — Akıllı Aile Yemek Planlayıcı</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Yemek Tercihlerim</h1>
+  <p class="muted">Her yemek için tercihinizi seçin. Seçim yapılmayan yemekler nötr kabul edilir.</p>
+
+  <table id="prefs-table">
+    <thead><tr><th>Yemek</th><th>Tercih</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="api.js"></script>
+  <script>
+    const PREF_OPTIONS = ["", "OK", "MAYBE", "NO", "VETO"];
+
+    async function loadPreferences(userId) {
+      const [meals, prefs] = await Promise.all([
+        apiFetch("/meals/"),
+        apiFetch(`/users/${userId}/preferences/`),
+      ]);
+      const prefByMeal = Object.fromEntries(prefs.map((p) => [p.meal_id, p.preference]));
+
+      const tbody = document.querySelector("#prefs-table tbody");
+      tbody.innerHTML = "";
+      for (const meal of meals) {
+        const tr = document.createElement("tr");
+        const select = document.createElement("select");
+        for (const opt of PREF_OPTIONS) {
+          const o = document.createElement("option");
+          o.value = opt;
+          o.textContent = opt || "(seçilmedi)";
+          if (prefByMeal[meal.id] === opt) o.selected = true;
+          select.appendChild(o);
+        }
+        select.addEventListener("change", async () => {
+          if (!select.value) return;
+          await apiFetch(`/users/${userId}/preferences/${meal.id}`, {
+            method: "PUT",
+            body: JSON.stringify({ preference: select.value }),
+          });
+        });
+        const nameTd = document.createElement("td");
+        nameTd.textContent = meal.name || meal.video_url;
+        const prefTd = document.createElement("td");
+        prefTd.appendChild(select);
+        tr.appendChild(nameTd);
+        tr.appendChild(prefTd);
+        tbody.appendChild(tr);
+      }
+    }
+
+    (async function init() {
+      const me = await requireLogin();
+      renderNav("preferences.html");
+      if (me) loadPreferences(me.id);
+    })();
+  </script>
+</body>
+</html>

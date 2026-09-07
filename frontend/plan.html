@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Plan — Akıllı Aile Yemek Planlayıcı</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Yemek Planı</h1>
+
+  <div class="card">
+    <label>Başlangıç <input type="date" id="start-date"></label>
+    <label>Bitiş <input type="date" id="end-date"></label>
+    <button id="load-btn" type="button">Planı Getir</button>
+    <button id="generate-btn" type="button">Planı Oluştur / Güncelle</button>
+    <p id="plan-error" class="error"></p>
+    <p id="plan-status" class="muted"></p>
+  </div>
+
+  <table id="plan-table">
+    <thead><tr><th>Tarih</th><th>Öğün</th><th>Yemek</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="card">
+    <h2>Kural Kontrolü</h2>
+    <table id="rules-table">
+      <thead><tr><th>Kural</th><th>Dönem</th><th>Gerçekleşen</th><th>Durum</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    function dateInputs() {
+      return {
+        start: document.getElementById("start-date").value,
+        end: document.getElementById("end-date").value,
+      };
+    }
+
+    function renderPlan(plans) {
+      const tbody = document.querySelector("#plan-table tbody");
+      tbody.innerHTML = "";
+      for (const p of plans.sort((a, b) => a.date.localeCompare(b.date))) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${p.date}</td><td>${p.meal_type}</td><td>${p.meal_name}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderRules(violations) {
+      const tbody = document.querySelector("#rules-table tbody");
+      tbody.innerHTML = "";
+      for (const v of violations) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${v.rule.name}</td>
+          <td>${v.period_start} → ${v.period_end}</td>
+          <td>${v.actual_count} / ${v.rule.min_count}</td>
+          <td>${v.satisfied ? "✅" : "⚠️"}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadPlan() {
+      const errorEl = document.getElementById("plan-error");
+      errorEl.textContent = "";
+      const { start, end } = dateInputs();
+      if (!start || !end) return;
+      try {
+        const [plans, violations] = await Promise.all([
+          apiFetch(`/meal-plans/filter/?start_date=${start}&end_date=${end}`),
+          apiFetch(`/rules/check/?start_date=${start}&end_date=${end}`),
+        ]);
+        renderPlan(plans);
+        renderRules(violations);
+      } catch (err) {
+        showError(errorEl, err);
+      }
+    }
+
+    document.getElementById("load-btn").addEventListener("click", loadPlan);
+
+    document.getElementById("generate-btn").addEventListener("click", async () => {
+      const errorEl = document.getElementById("plan-error");
+      const statusEl = document.getElementById("plan-status");
+      errorEl.textContent = "";
+      statusEl.textContent = "";
+      const { start, end } = dateInputs();
+      if (!start || !end) {
+        errorEl.textContent = "Lütfen başlangıç ve bitiş tarihi seçin";
+        return;
+      }
+      try {
+        await apiFetch("/meal-plans/generate/", {
+          method: "POST",
+          body: JSON.stringify({ start_date: start, end_date: end }),
+        });
+        statusEl.textContent = "Plan oluşturuldu.";
+        loadPlan();
+      } catch (err) {
+        showError(errorEl, err);
+      }
+    });
+
+    (async function init() {
+      await requireLogin();
+      renderNav("plan.html");
+      const today = new Date();
+      const in7 = new Date(today.getTime() + 7 * 86400000);
+      document.getElementById("start-date").value = today.toISOString().slice(0, 10);
+      document.getElementById("end-date").value = in7.toISOString().slice(0, 10);
+      loadPlan();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Programım — Akıllı Aile Yemek Planlayıcı</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Ev/Dışarıda Programım</h1>
+  <p class="muted">İşaretlenmemiş günlerde varsayılan olarak evde kabul edilirsiniz.</p>
+
+  <div class="card">
+    <label>Başlangıç <input type="date" id="start-date"></label>
+    <label>Bitiş <input type="date" id="end-date"></label>
+    <button id="load-btn" type="button">Göster</button>
+  </div>
+
+  <table id="schedule-table">
+    <thead><tr><th>Tarih</th><th>Evde miyim?</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="api.js"></script>
+  <script>
+    function dateRange(start, end) {
+      const dates = [];
+      let d = new Date(start);
+      const endD = new Date(end);
+      while (d <= endD) {
+        dates.push(d.toISOString().slice(0, 10));
+        d.setDate(d.getDate() + 1);
+      }
+      return dates;
+    }
+
+    async function loadSchedule(userId) {
+      const start = document.getElementById("start-date").value;
+      const end = document.getElementById("end-date").value;
+      if (!start || !end) return;
+
+      const entries = await apiFetch(`/users/${userId}/schedule/?start_date=${start}&end_date=${end}`);
+      const byDate = Object.fromEntries(entries.map((e) => [e.date, e.is_home]));
+
+      const tbody = document.querySelector("#schedule-table tbody");
+      tbody.innerHTML = "";
+      for (const date of dateRange(start, end)) {
+        const tr = document.createElement("tr");
+        const dateTd = document.createElement("td");
+        dateTd.textContent = date;
+        const checkTd = document.createElement("td");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = byDate[date] !== undefined ? byDate[date] : true;
+        checkbox.addEventListener("change", async () => {
+          await apiFetch(`/users/${userId}/schedule/${date}`, {
+            method: "PUT",
+            body: JSON.stringify({ is_home: checkbox.checked }),
+          });
+        });
+        checkTd.appendChild(checkbox);
+        tr.appendChild(dateTd);
+        tr.appendChild(checkTd);
+        tbody.appendChild(tr);
+      }
+    }
+
+    (async function init() {
+      const me = await requireLogin();
+      renderNav("schedule.html");
+      const today = new Date();
+      const in7 = new Date(today.getTime() + 7 * 86400000);
+      document.getElementById("start-date").value = today.toISOString().slice(0, 10);
+      document.getElementById("end-date").value = in7.toISOString().slice(0, 10);
+      document.getElementById("load-btn").addEventListener("click", () => loadSchedule(me.id));
+      if (me) loadSchedule(me.id);
+    })();
+  </script>
+</body>
+</html>
